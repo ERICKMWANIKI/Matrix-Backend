@@ -12,7 +12,7 @@ from models import db, User, BeamBlock, HollowBlock, PavingBlock, RoadKerb, Serv
 # Load environment variables
 load_dotenv()
 
-# Initialize the flask application
+# Initialize the Flask application
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -59,26 +59,21 @@ api.add_resource(Index, '/')
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
+    email = request.json.get('email')
+    password = request.json.get('password')
 
+    # Query user by email
     user = User.query.filter_by(email=email).first()
 
     if user and bcrypt.check_password_hash(user.password, password):
-        access_token = create_access_token(identity=user.user_id)
-        response = {
-            "access_token": access_token,
-            "role": user.role,
-            "id": user.user_id
-        }
-        return make_response(jsonify(response), 200)
-    else:
-        return make_response(jsonify({"error": "Invalid credentials"}), 401)
+        token = create_access_token(identity=user.id, additional_claims={"role": user.role})
+        return jsonify({"token": token, "role": user.role}), 200
+
+    return jsonify({"error": "Invalid credentials"}), 401
 
 @app.route('/create_admin', methods=['POST'])
 def create_admin():
-    if not request.json.get('admin_key') == 'YOUR_SECRET_KEY':
+    if request.json.get('admin_key') != os.environ.get('ADMIN_SECRET_KEY'):
         return jsonify({"error": "Unauthorized"}), 403
 
     username = request.json.get('username')
@@ -116,7 +111,7 @@ class Users(Resource):
         db.session.add(new_user)
         db.session.commit()
 
-        access_token = create_access_token(identity=new_user.user_id)
+        access_token = create_access_token(identity=new_user.id)
 
         response = {
             "user": new_user.to_dict(),
@@ -381,7 +376,6 @@ class OrderByID(Resource):
         return make_response(jsonify(order.to_dict()), 200)
 
 api.add_resource(OrderByID, '/orders/<int:order_id>')
-
 
 if __name__ == "__main__":
     app.run(port=5555, debug=True)
